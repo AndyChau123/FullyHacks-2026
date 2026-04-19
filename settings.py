@@ -270,17 +270,36 @@ FISH_SPAWN_EXCLUSION = 2
 # Fish count per depth
 FISH_COUNT = {
     "Depth 1": 2,
-    "Depth 2": 3,
-    "Depth 3": 5,
-    "Depth 4": 8,
+    "Depth 2": 2,
+    "Depth 3": 3,
+    "Depth 4": 3,
 }
 
-# Player actions between each fish move (lower = faster)
+# Player actions between each fish act (lower = faster)
 FISH_MOVE_INTERVAL = {
     "Depth 1": 3,
     "Depth 2": 3,
     "Depth 3": 2,
     "Depth 4": 2,
+}
+
+# Fish AI behavior per depth
+# "random" — completely random turning and movement
+# "chase"  — tracks player when within FISH_CHASE_RADIUS tiles
+FISH_BEHAVIOR = {
+    "Depth 1": "random",
+    "Depth 2": "chase",
+    "Depth 3": "chase",
+    "Depth 4": "chase",
+}
+
+# Chebyshev radius for chase detection per depth
+# radius 2 = 5×5 area, radius 3 = 7×7 area
+FISH_CHASE_RADIUS = {
+    "Depth 1": 2,
+    "Depth 2": 2,
+    "Depth 3": 2,
+    "Depth 4": 4,
 }
 
 # EMP stun

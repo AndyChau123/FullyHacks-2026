@@ -16,10 +16,6 @@ _SHOP_HOVER  = (120,  85,  10)
 _SHOP_BORDER = (220, 170,  40)
 _SHOP_TEXT   = (255, 220,  80)
 
-_RESET_FILL   = ( 80,  10,  10)
-_RESET_HOVER  = (130,  20,  20)
-_RESET_BORDER = (200,  50,  50)
-_RESET_TEXT   = (255, 100, 100)
 
 _NORMAL = ( 10,  40,  70)
 _HOVER  = ( 20,  70, 110)
@@ -119,7 +115,7 @@ class Menu:
         self._font_title = None
         self._font_btn   = None
         self._font_sub   = None
-        self._font_save  = None
+
 
         cx = settings.SCREEN_WIDTH  // 2
         cy = settings.SCREEN_HEIGHT // 2
@@ -156,11 +152,6 @@ class Menu:
             border=_SHOP_BORDER, text_col=_SHOP_TEXT,
         )
 
-        # ----- Save panel + reset button (top-right) -----------------
-        self._reset_rect = pygame.Rect(settings.SCREEN_WIDTH - 42, 12, 30, 30)
-        self._save_panel_rect = pygame.Rect(
-            settings.SCREEN_WIDTH - 42 - 220 - 8, 12, 220, 30
-        )
 
     # ----------------------------------------------------------
 
@@ -169,9 +160,6 @@ class Menu:
 
     def handle_event(self, event: pygame.event.Event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self._reset_rect.collidepoint(event.pos):
-                self._save = save_manager.reset()
-                return None
             for btn in self._grid_btns:
                 val = btn.handle_click(event.pos)
                 if val:
@@ -253,34 +241,9 @@ class Menu:
         self.screen.blit(sel_bg, (sel_x - 10, sel_y - 4))
         self.screen.blit(sel_label, (sel_x, sel_y))
 
-        # 6. Save panel
-        self._draw_save_panel(mouse)
-
-    def _draw_save_panel(self, mouse: tuple[int, int]) -> None:
-        pygame.draw.rect(self.screen, (5, 20, 40),
-                         self._save_panel_rect, border_radius=6)
-        pygame.draw.rect(self.screen, (0, 80, 60),
-                         self._save_panel_rect, width=1, border_radius=6)
-        score_txt = self._font_save.render(
-            f"SCORE: {self._save['total_score']}   "
-            f"RUNS: {self._save['runs_completed']}",
-            True, settings.HUD_GREEN,
-        )
-        self.screen.blit(score_txt, score_txt.get_rect(
-            midleft=(self._save_panel_rect.left + 8, self._save_panel_rect.centery)
-        ))
-        hovered = self._reset_rect.collidepoint(mouse)
-        pygame.draw.rect(self.screen,
-                         _RESET_HOVER if hovered else _RESET_FILL,
-                         self._reset_rect, border_radius=6)
-        pygame.draw.rect(self.screen, _RESET_BORDER, self._reset_rect,
-                         width=1, border_radius=6)
-        x_surf = self._font_save.render("✕", True, _RESET_TEXT)
-        self.screen.blit(x_surf, x_surf.get_rect(center=self._reset_rect.center))
 
     def _ensure_fonts(self) -> None:
         if self._font_title is None:
             self._font_title = pygame.font.SysFont("monospace", 58, bold=True)
             self._font_btn   = pygame.font.SysFont("monospace", 20, bold=True)
             self._font_sub   = pygame.font.SysFont("monospace", 13, bold=True)
-            self._font_save  = pygame.font.SysFont("monospace", 13, bold=True)

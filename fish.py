@@ -1,11 +1,18 @@
 # =============================================================
 #  fish.py  —  Enemy fish entities
 #
-#  Fish class: single fish with configurable move_interval and
-#  behavior type so depth-specific AI can be added later.
+#  Fish move like the player: they must face a direction before
+#  moving into it.  Each "act" tick does ONE of:
+#    • turn one 90° step towards their desired direction, OR
+#    • move forward (if already facing their desired direction)
 #
-#  FishManager: spawns + drives all fish, exposes collision
-#  helpers and EMP stun API.
+#  Behaviors
+#  ---------
+#  "random" — picks a passable direction at random; holds it
+#             until moved or blocked (Depth 1).
+#  "chase"  — re-evaluates target towards the player every tick
+#             when the player is within FISH_CHASE_RADIUS tiles;
+#             otherwise behaves randomly (Depths 2–4).
 # =============================================================
 
 import random
@@ -37,29 +44,32 @@ class Fish:
     ----------
     move_interval : int
         The fish acts once every this many player actions.
-        Change per depth or per fish type (e.g. boss fish = 1).
     behavior : str
-        AI mode — "random" now; more added later ("chase", "patrol", …).
+        AI mode — "random" or "chase".
     """
 
     def __init__(self, x: int, y: int,
                  move_interval: int = 3,
-                 behavior: str = "random"):
-        self.x = x
-        self.y = y
+                 behavior: str = "random",
+                 chase_radius: int = 2):
+        self.x             = x
+        self.y             = y
+        self.facing        = random.choice(_DIRS)
+        self.desired_dir   = random.choice(_DIRS)
         self.move_interval  = move_interval
         self.behavior       = behavior
-        self._action_count  = 0          # player actions since last fish move
-        self.stun_remaining = 0          # player actions left while stunned
-        self.next_dir       = random.choice(_DIRS)  # shown as arrow on radar
+        self.chase_radius   = chase_radius
+        self._action_count  = 0
+        self.stun_remaining = 0
 
     # ----------------------------------------------------------
     #  Called once per player action
     # ----------------------------------------------------------
 
-    def on_player_action(self, grid) -> bool:
-        """Advance internal counter; move when interval reached.
-        Returns True if the fish actually moved this tick."""
+    def on_player_action(self, grid,
+                         player_x: int = 0, player_y: int = 0) -> bool:
+        """Advance internal counter; act when interval is reached.
+        Returns True if the fish took an action this tick."""
         if self.stun_remaining > 0:
             self.stun_remaining -= 1
             return False
@@ -69,31 +79,53 @@ class Fish:
             return False
 
         self._action_count = 0
-        self._move(grid)
+        self._act(grid, player_x, player_y)
         return True
+
+    # ----------------------------------------------------------
+    #  Act: one turn OR one move
+    # ----------------------------------------------------------
+
+    def _act(self, grid, player_x: int, player_y: int) -> None:
+        # Chase fish re-evaluate their target every act tick
+        if self.behavior == "chase":
+            r = self.chase_radius
+            if abs(self.x - player_x) <= r and abs(self.y - player_y) <= r:
+                self.desired_dir = self._chase_dir(grid, player_x, player_y)
+
+        if self.facing != self.desired_dir:
+            # Not yet facing target — turn one 90° step
+            self.facing = self._step_towards(self.desired_dir)
+        else:
+            # Facing target — try to move forward
+            if self._try_move_forward(grid):
+                # Moved — random fish pick a new direction; chase re-evaluates next tick
+                if self.behavior == "random":
+                    self.desired_dir = self._random_dir(grid)
+            else:
+                # Blocked — pick a new direction, avoiding the current one
+                self.desired_dir = self._pick_dir(
+                    grid, player_x, player_y, exclude=self.facing
+                )
+
+    # ----------------------------------------------------------
+    #  Turning
+    # ----------------------------------------------------------
+
+    def _step_towards(self, target: int) -> int:
+        """Return facing after one 90° step towards target (shortest path)."""
+        right_steps = (target - self.facing) % 4
+        left_steps  = (self.facing - target) % 4
+        if right_steps <= left_steps:
+            return (self.facing + 1) % 4
+        return (self.facing - 1) % 4
 
     # ----------------------------------------------------------
     #  Movement
     # ----------------------------------------------------------
 
-    def _move(self, grid) -> None:
-        """Attempt to move in next_dir; pick a new direction if blocked."""
-        if self._try_dir(self.next_dir, grid):
-            self._pick_next(grid)
-            return
-
-        dirs = _DIRS[:]
-        random.shuffle(dirs)
-        for d in dirs:
-            if self._try_dir(d, grid):
-                self._pick_next(grid)
-                return
-
-        # Completely boxed in — stay put but still refresh arrow
-        self._pick_next(grid)
-
-    def _try_dir(self, direction: int, grid) -> bool:
-        dx, dy = _DELTA[direction]
+    def _try_move_forward(self, grid) -> bool:
+        dx, dy = _DELTA[self.facing]
         nx, ny = self.x + dx, self.y + dy
         tile = grid.get(nx, ny)
         if tile is None or tile == TileType.ROCK:
@@ -101,11 +133,51 @@ class Fish:
         self.x, self.y = nx, ny
         return True
 
-    def _pick_next(self, grid) -> None:
-        """Pre-select next direction for radar arrow. Override per behavior."""
-        if self.behavior == "random":
+    # ----------------------------------------------------------
+    #  Direction selection
+    # ----------------------------------------------------------
+
+    def _pick_dir(self, grid, player_x: int, player_y: int,
+                  exclude: int | None = None) -> int:
+        """Choose a desired direction based on behavior."""
+        if self.behavior == "chase":
+            r = self.chase_radius
+            if abs(self.x - player_x) <= r and abs(self.y - player_y) <= r:
+                return self._chase_dir(grid, player_x, player_y, exclude)
+        return self._random_dir(grid, exclude)
+
+    def _chase_dir(self, grid, player_x: int, player_y: int,
+                   exclude: int | None = None) -> int:
+        """Direction that best closes the gap to the player."""
+        dx = player_x - self.x
+        dy = player_y - self.y
+
+        # Order candidates: close the larger axis first
+        if abs(dx) >= abs(dy):
+            primary   = settings.EAST  if dx > 0 else settings.WEST
+            secondary = settings.SOUTH if dy > 0 else settings.NORTH
+        else:
+            primary   = settings.SOUTH if dy > 0 else settings.NORTH
+            secondary = settings.EAST  if dx > 0 else settings.WEST
+
+        order = [
+            primary,
+            secondary,
+            (secondary + 2) % 4,
+            (primary   + 2) % 4,
+        ]
+
+        for d in order:
+            if d != exclude and self._passable(d, grid):
+                return d
+        return self._random_dir(grid, exclude)
+
+    def _random_dir(self, grid, exclude: int | None = None) -> int:
+        """Pick a random passable direction, optionally excluding one."""
+        valid = [d for d in _DIRS if d != exclude and self._passable(d, grid)]
+        if not valid:
             valid = [d for d in _DIRS if self._passable(d, grid)]
-            self.next_dir = random.choice(valid) if valid else random.choice(_DIRS)
+        return random.choice(valid) if valid else self.facing
 
     def _passable(self, direction: int, grid) -> bool:
         dx, dy = _DELTA[direction]
@@ -117,7 +189,7 @@ class Fish:
     # ----------------------------------------------------------
 
     def stun(self, duration: int) -> None:
-        """Stun for `duration` player actions (EMP). Stacks up to the longer."""
+        """Stun for `duration` player actions. Stacks up to the longer."""
         self.stun_remaining = max(self.stun_remaining, duration)
 
     # ----------------------------------------------------------
@@ -126,19 +198,17 @@ class Fish:
 
     @property
     def arrow(self) -> str:
-        return ARROW[self.next_dir]
+        return ARROW[self.facing]
 
     @property
     def is_stunned(self) -> bool:
         return self.stun_remaining > 0
 
 
+# =============================================================
+
 class FishManager:
-    """
-    Manages all enemy fish for a single run.
-    Built for extension: swap in new behavior strings or move_intervals
-    per depth without touching this class.
-    """
+    """Manages all enemy fish for a single run."""
 
     def __init__(self):
         self.fish: list[Fish] = []
@@ -150,9 +220,10 @@ class FishManager:
     def spawn(self, count: int, grid,
               spawn_x: int, spawn_y: int,
               move_interval: int = 3,
-              behavior: str = "random") -> None:
+              behavior: str = "random",
+              chase_radius: int = 2) -> None:
         """
-        Place `count` fish on random EMPTY tiles that are outside the
+        Place `count` fish on random EMPTY tiles outside the
         FISH_SPAWN_EXCLUSION radius around (spawn_x, spawn_y).
         """
         self.fish.clear()
@@ -169,7 +240,8 @@ class FishManager:
         random.shuffle(candidates)
         for gx, gy in candidates[:count]:
             self.fish.append(
-                Fish(gx, gy, move_interval=move_interval, behavior=behavior)
+                Fish(gx, gy, move_interval=move_interval,
+                     behavior=behavior, chase_radius=chase_radius)
             )
 
         print(f"[Fish] Spawned {len(self.fish)} fish "
@@ -179,14 +251,15 @@ class FishManager:
     #  Per-action update
     # ----------------------------------------------------------
 
-    def on_player_action(self, grid) -> list[tuple[int, int]]:
+    def on_player_action(self, grid,
+                         player_x: int = 0, player_y: int = 0) -> list[tuple[int, int]]:
         """
         Advance all fish by one player action.
         Returns the new (x, y) of every fish that moved this tick.
         """
         moved = []
         for f in self.fish:
-            if f.on_player_action(grid):
+            if f.on_player_action(grid, player_x, player_y):
                 moved.append((f.x, f.y))
         return moved
 

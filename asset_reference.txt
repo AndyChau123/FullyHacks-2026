@@ -62,14 +62,32 @@
     radar_player_s.png      Facing South  (fallback: "v")
     radar_player_w.png      Facing West   (fallback: "<")
 
-  Fish icons:
-    radar_fish.png          Active fish   (fallback: red dot)
-    radar_fish_stun.png     Stunned fish  (fallback: same red dot,
-                                           grey arrow overlay)
+  Fish / enemy icons:
+    radar_fish.png          Active fish        (fallback: red filled square)
+    radar_fish_stun.png     Stunned fish       (fallback: same red square,
+                                                grey arrow overlay)
 
-  Note: a small directional arrow is always drawn in the
-  top-left corner of a fish cell to indicate its next move,
-  regardless of whether radar_fish.png is present.
+  Enemy direction indicator:
+    A small directional arrow is ALWAYS drawn in the top-left corner
+    of every enemy radar cell to show which way the fish is currently
+    facing, regardless of whether radar_fish.png is present.
+    Arrow colour:  white  = active
+                   grey   = stunned
+    The arrow reflects the fish's current facing direction and updates
+    one step at a time as the enemy turns toward its target.
+
+  Naval mine icons:
+    radar_mine.png          Dormant mine       (fallback: "M" in orange)
+    radar_mine_trig.png     Triggered mine counting down
+                            (fallback: "M" in red, countdown number
+                             drawn on top)
+    Mines are only present in Depth 3 and Depth 4.
+
+  Treasure icon:
+    radar_treasure.png      Treasure tile      (fallback: "T" in gold)
+    Also used as a hover highlight on the main tile viewport:
+    when the cursor is over a treasure tile, its pixel outline
+    is traced in gold (settings.TREASURE_HIGHLIGHT colour).
 
 ----------------------------------------------------------------
   OTHER IMAGE ASSETS

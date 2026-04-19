@@ -16,6 +16,7 @@ from ui_buttons import DirectionButtons, ACTION_LEFT, ACTION_FORWARD, ACTION_RIG
 from fish import FishManager
 from mine import MineManager
 from home_screen import HomeScreen
+from cutscene import Cutscene
 
 # Direction delta used for harpoon ray-casting (defined here to avoid importing fish internals)
 _DIR_DELTA = {
@@ -27,6 +28,7 @@ _DIR_DELTA = {
 
 # Game states
 _HOME      = "home"
+_CUTSCENE  = "cutscene"
 _MENU      = "menu"
 _PLAYING   = "playing"
 _DEAD      = "dead"
@@ -61,6 +63,7 @@ class Game:
         self.home_screen = HomeScreen(self.screen, self.hud_image)
         self.menu        = Menu(self.screen, self.hud_image)
         self.shop        = Shop(self.screen, self.hud_image)
+        self.cutscene    = None
 
         _sbx = (settings.SCREEN_WIDTH  - settings.SCAN_BTN_W) // 2
         _sby = settings.SCREEN_HEIGHT  - settings.SCAN_BTN_H  - settings.SCAN_BTN_BOTTOM_PAD
@@ -166,13 +169,15 @@ class Game:
         self._scanner_upgrade_uses = _sv.get("scanner_upgrade_uses", 0)
         self._scan_enhanced        = False
 
-        depth   = self.menu.depth_label
-        f_count = settings.FISH_COUNT.get(depth, 2)
-        f_intv  = settings.FISH_MOVE_INTERVAL.get(depth, 3)
+        depth      = self.menu.depth_label
+        f_count    = settings.FISH_COUNT.get(depth, 2)
+        f_intv     = settings.FISH_MOVE_INTERVAL.get(depth, 3)
+        f_behavior = settings.FISH_BEHAVIOR.get(depth, "random")
+        f_radius   = settings.FISH_CHASE_RADIUS.get(depth, 2)
         self.fish_manager.spawn(
             count=f_count, grid=self.grid,
             spawn_x=self.spawn_x, spawn_y=self.spawn_y,
-            move_interval=f_intv,
+            move_interval=f_intv, behavior=f_behavior, chase_radius=f_radius,
         )
 
         m_count = settings.MINE_COUNT.get(depth, 0)
@@ -197,6 +202,8 @@ class Game:
         while self.running:
             if self.state == _HOME:
                 self._tick_home()
+            elif self.state == _CUTSCENE:
+                self._tick_cutscene()
             elif self.state == _MENU:
                 self._tick_menu()
             elif self.state == _PLAYING:
@@ -222,13 +229,32 @@ class Game:
                 return
             result = self.home_screen.handle_event(event)
             if result == "start":
-                self.state = _MENU
+                self.cutscene = Cutscene(self.screen, self.hud_image)
+                self.state    = _CUTSCENE
                 return
             if result == "quit":
                 self.running = False
                 return
 
         self.home_screen.draw()
+        pygame.display.flip()
+        self.clock.tick(settings.FPS)
+
+    # ----------------------------------------------------------
+    #  Cutscene tick
+    # ----------------------------------------------------------
+
+    def _tick_cutscene(self) -> None:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+                return
+            if self.cutscene and self.cutscene.handle_event(event) == "done":
+                self.state = _MENU
+                return
+
+        if self.cutscene:
+            self.cutscene.draw()
         pygame.display.flip()
         self.clock.tick(settings.FPS)
 
@@ -317,7 +343,7 @@ class Game:
                 print("[Game] Scan expired.")
 
         # Advance fish
-        self.fish_manager.on_player_action(self.grid)
+        self.fish_manager.on_player_action(self.grid, self.player.x, self.player.y)
         if self.fish_manager.check_collision(self.player.x, self.player.y):
             self._die_by_fish()
             return
@@ -1157,6 +1183,8 @@ class Game:
                 self.running = False
                 return
             if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
+                save_manager.reset()
+                self._game_score_total = 0
                 self.menu.reload_save()
                 self.home_screen = HomeScreen(self.screen, self.hud_image)
                 self.state = _HOME
@@ -1235,7 +1263,11 @@ class Game:
                 self.running = False
                 return
             if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
-                self.state = _MENU
+                save_manager.reset()
+                self._game_score_total = 0
+                self.menu.reload_save()
+                self.home_screen = HomeScreen(self.screen, self.hud_image)
+                self.state = _HOME
                 return
 
         self.screen.blit(self.hud_image, (0, 0))
