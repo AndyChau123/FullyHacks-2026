@@ -1,15 +1,24 @@
 # =============================================================
 #  home_screen.py  —  Title / home screen shown on launch
 #
+#  Background: main_fish.gif (animated, loaded via Pillow).
 #  Three buttons: START GAME → depth-select menu
 #                 OPTIONS    → options overlay (save reset)
 #                 HOW TO PLAY → controls / tips overlay
+#                 QUIT        → exit game
 # =============================================================
 
+import os
 import pygame
 import settings
 import asset_loader
-import save_manager
+
+
+try:
+    from PIL import Image as _PILImage
+    _PIL_OK = True
+except ImportError:
+    _PIL_OK = False
 
 # ----- Colour palettes ----------------------------------------
 _NORMAL    = ( 10,  40,  70)
@@ -17,11 +26,6 @@ _HOVER     = ( 20,  70, 110)
 _PRESSED   = (  5,  25,  45)
 _BORDER    = (  0, 150, 200)
 _TEXT      = (180, 230, 255)
-
-_OPT_FILL   = ( 10,  40,  55)
-_OPT_HOVER  = ( 20,  65,  85)
-_OPT_BORDER = (  0, 120, 160)
-_OPT_TEXT   = (140, 200, 230)
 
 _INFO_FILL   = (  8,  30,  50)
 _INFO_HOVER  = ( 15,  55,  80)
@@ -33,13 +37,10 @@ _QUIT_HOVER  = (110,  18,  18)
 _QUIT_BORDER = (180,  40,  40)
 _QUIT_TEXT   = (240,  90,  90)
 
-_RESET_FILL   = ( 80,  10,  10)
-_RESET_HOVER  = (130,  20,  20)
-_RESET_BORDER = (200,  50,  50)
-_RESET_TEXT   = (255, 100, 100)
-
 _PANEL_BG     = (  4,  18,  36)
 _PANEL_BORDER = (  0, 200, 100)
+
+_GIF_ASSET = "main_fish.gif"   # inside assets/images/
 
 
 class _HomeButton:
@@ -106,6 +107,7 @@ class HomeScreen:
 
     handle_event() returns:
       "start"  — proceed to the depth-select menu
+      "quit"   — exit the game
       None     — no action (overlays handled internally)
     """
 
@@ -120,69 +122,93 @@ class HomeScreen:
         self._font_sm    = None
 
         self._show_instructions = False
-        self._show_options      = False
 
-        cx  = settings.SCREEN_WIDTH  // 2
+        # ----- Buttons — left side, vertically stacked -----------
         BTW = 260   # button width
-        BTH = 65    # button height
-        GAP = 18    # gap between buttons
-        bx  = cx - BTW // 2
-        by  = 340   # top of first button
+        BTH = 60    # button height
+        GAP = 20    # gap between buttons
+        bx  = 150   # left edge
+        # Place the 3-button stack near the bottom
+        total_h = BTH * 3 + GAP * 2
+        by      = settings.SCREEN_HEIGHT - total_h - 80
 
         self._start_btn = _HomeButton(
             pygame.Rect(bx, by,                   BTW, BTH),
             "▶   START GAME", value="start",
         )
-        self._opts_btn = _HomeButton(
-            pygame.Rect(bx, by + BTH + GAP,       BTW, BTH),
-            "⚙   OPTIONS",    value="options",
-            fill=_OPT_FILL, hover=_OPT_HOVER,
-            border=_OPT_BORDER, text_col=_OPT_TEXT,
-        )
         self._info_btn = _HomeButton(
-            pygame.Rect(bx, by + (BTH + GAP) * 2, BTW, BTH),
+            pygame.Rect(bx, by + (BTH + GAP),     BTW, BTH),
             "?   HOW TO PLAY", value="instructions",
             fill=_INFO_FILL, hover=_INFO_HOVER,
             border=_INFO_BORDER, text_col=_INFO_TEXT,
         )
         self._quit_btn = _HomeButton(
-            pygame.Rect(bx, by + (BTH + GAP) * 3, BTW, BTH),
+            pygame.Rect(bx, by + (BTH + GAP) * 2, BTW, BTH),
             "✕   QUIT",        value="quit",
             fill=_QUIT_FILL, hover=_QUIT_HOVER,
             border=_QUIT_BORDER, text_col=_QUIT_TEXT,
         )
-        self._buttons = [self._start_btn, self._opts_btn, self._info_btn, self._quit_btn]
+        self._buttons = [self._start_btn, self._info_btn, self._quit_btn]
 
-        # Overlay panels — centred on screen
+        # ----- Overlay panels — centred on screen ----------------
         PW, PH = 620, 460
         px = (settings.SCREEN_WIDTH  - PW) // 2
         py = (settings.SCREEN_HEIGHT - PH) // 2
         self._panel_rect  = pygame.Rect(px, py, PW, PH)
         self._panel_close = pygame.Rect(px + PW - 42, py + 10, 30, 30)
 
-        # Reset button inside options panel
-        self._reset_rect = pygame.Rect(cx - 100, py + 195, 200, 44)
+        cx = settings.SCREEN_WIDTH // 2
+
+        # ----- Animated GIF --------------------------------------
+        self._gif_frames : list[pygame.Surface] = []
+        self._gif_delays : list[int]             = []   # ms per frame
+        self._gif_index  = 0
+        self._gif_ms     = 0.0   # accumulated ms for current frame
+        self._load_gif()
+
+    # ----------------------------------------------------------
+    #  GIF loading
+    # ----------------------------------------------------------
+
+    def _load_gif(self) -> None:
+        if not _PIL_OK:
+            return
+        path = os.path.join(settings.IMAGES_DIR, _GIF_ASSET)
+        if not os.path.exists(path):
+            return
+        try:
+            img = _PILImage.open(path)
+            sw, sh = settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT
+            while True:
+                frame = img.copy().convert("RGBA")
+                fw, fh = frame.size
+                scale  = max(sw / fw, sh / fh)
+                nw, nh = int(fw * scale), int(fh * scale)
+                frame  = frame.resize((nw, nh), _PILImage.LANCZOS)
+                raw    = frame.tobytes()
+                surf   = pygame.image.fromstring(raw, (nw, nh), "RGBA")
+                self._gif_frames.append(surf)
+                self._gif_delays.append(max(img.info.get("duration", 80), 1))
+                img.seek(img.tell() + 1)
+        except EOFError:
+            pass
 
     # ----------------------------------------------------------
     #  Event handling
     # ----------------------------------------------------------
 
     def handle_event(self, event: pygame.event.Event):
-        overlay_open = self._show_instructions or self._show_options
+        overlay_open = self._show_instructions
 
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             if overlay_open:
                 self._show_instructions = False
-                self._show_options      = False
             return None
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if overlay_open:
                 if self._panel_close.collidepoint(event.pos):
                     self._show_instructions = False
-                    self._show_options      = False
-                elif self._show_options and self._reset_rect.collidepoint(event.pos):
-                    save_manager.reset()
                 return None
 
             for btn in self._buttons:
@@ -191,12 +217,8 @@ class HomeScreen:
                     return "start"
                 if val == "quit":
                     return "quit"
-                if val == "options":
-                    self._show_options      = True
-                    self._show_instructions = False
                 if val == "instructions":
                     self._show_instructions = True
-                    self._show_options      = False
 
         if event.type == pygame.MOUSEBUTTONUP:
             for btn in self._buttons:
@@ -212,48 +234,41 @@ class HomeScreen:
         self._ensure_fonts()
         mouse = pygame.mouse.get_pos()
 
-        # Background — use depth_select art if available, else HUD + dark overlay
+        # Background — animated GIF or fallback
         self.screen.fill(settings.DARK_BLUE)
-        if asset_loader.has_image(settings.DEPTH_SELECT_BG, settings.IMAGES_DIR):
-            bg = asset_loader.load_image(
-                settings.DEPTH_SELECT_BG,
-                size=(settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT),
-                base_dir=settings.IMAGES_DIR,
-            )
-            self.screen.blit(bg, (0, 0))
+        if self._gif_frames:
+            self._gif_ms += 1000.0 / settings.FPS
+            while self._gif_ms >= self._gif_delays[self._gif_index]:
+                self._gif_ms  -= self._gif_delays[self._gif_index]
+                self._gif_index = (self._gif_index + 1) % len(self._gif_frames)
+            frame = self._gif_frames[self._gif_index]
+            fr    = frame.get_rect(center=(settings.SCREEN_WIDTH  // 2,
+                                           settings.SCREEN_HEIGHT // 2))
+            self.screen.blit(frame, fr)
         else:
-            self.screen.blit(self.hud_image, (0, 0))
+            if asset_loader.has_image(settings.DEPTH_SELECT_BG, settings.IMAGES_DIR):
+                bg = asset_loader.load_image(
+                    settings.DEPTH_SELECT_BG,
+                    size=(settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT),
+                    base_dir=settings.IMAGES_DIR,
+                )
+                self.screen.blit(bg, (0, 0))
 
+        # Light overlay so text/buttons are readable
         overlay = pygame.Surface(
             (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT), pygame.SRCALPHA
         )
-        overlay.fill((0, 0, 20, 210))
+        overlay.fill((0, 0, 15, 140))
         self.screen.blit(overlay, (0, 0))
 
-        cx = settings.SCREEN_WIDTH // 2
-
-        # Title
-        shadow = self._font_title.render("DEEP  DIVE", True, (0, 0, 0))
-        title  = self._font_title.render("DEEP  DIVE", True, settings.HUD_GREEN)
-        self.screen.blit(shadow, shadow.get_rect(center=(cx + 2, 187)))
-        self.screen.blit(title,  title.get_rect(center=(cx, 185)))
-
-        # Tagline
-        sub = self._font_sub.render(
-            "Descend. Collect. Survive.", True, (60, 140, 100)
-        )
-        self.screen.blit(sub, sub.get_rect(center=(cx, 255)))
-
         # Buttons (hidden while an overlay is open)
-        if not self._show_instructions and not self._show_options:
+        if not self._show_instructions:
             for btn in self._buttons:
                 btn.draw(self.screen, self._font_btn, mouse)
 
-        # Overlays
+        # Overlay
         if self._show_instructions:
             self._draw_instructions_overlay(mouse)
-        elif self._show_options:
-            self._draw_options_overlay(mouse)
 
     # ----------------------------------------------------------
     #  Instructions overlay
@@ -300,41 +315,6 @@ class HomeScreen:
             y += 8
 
     # ----------------------------------------------------------
-    #  Options overlay
-    # ----------------------------------------------------------
-
-    def _draw_options_overlay(self, mouse: tuple[int, int]) -> None:
-        p  = self._panel_rect
-        cx = p.centerx
-        self._draw_panel_base(p, "OPTIONS", mouse)
-
-        sv   = save_manager.load()
-        info = self._font_sm.render(
-            f"Score: {sv['total_score']}   "
-            f"Runs: {sv['runs_completed']}   "
-            f"Shuckles: {sv.get('shuckles', 0)}",
-            True, (100, 170, 130),
-        )
-        self.screen.blit(info, info.get_rect(center=(cx, p.top + 105)))
-
-        label = self._font_body.render("Save Data", True, (140, 210, 175))
-        self.screen.blit(label, label.get_rect(center=(cx, p.top + 148)))
-
-        # Reset button
-        hov  = self._reset_rect.collidepoint(mouse)
-        fill = _RESET_HOVER if hov else _RESET_FILL
-        pygame.draw.rect(self.screen, fill,          self._reset_rect, border_radius=8)
-        pygame.draw.rect(self.screen, _RESET_BORDER, self._reset_rect, width=2, border_radius=8)
-        btn_txt = self._font_btn.render("✕  Reset Save Data", True, _RESET_TEXT)
-        self.screen.blit(btn_txt, btn_txt.get_rect(center=self._reset_rect.center))
-
-        hint = self._font_sm.render(
-            "This permanently deletes your score and shuckles.",
-            True, (100, 80, 80),
-        )
-        self.screen.blit(hint, hint.get_rect(center=(cx, self._reset_rect.bottom + 16)))
-
-    # ----------------------------------------------------------
     #  Shared panel background + close button
     # ----------------------------------------------------------
 
@@ -355,7 +335,6 @@ class HomeScreen:
         pygame.draw.line(self.screen, (0, 90, 55),
                          (p.left + 20, p.top + 52), (p.right - 20, p.top + 52))
 
-        # Close (✕) button
         hov = self._panel_close.collidepoint(mouse)
         pygame.draw.rect(self.screen,
                          (130, 25, 25) if hov else (80, 10, 10),

@@ -49,7 +49,10 @@ class Game:
 
     def __init__(self):
         pygame.init()
+        pygame.mixer.init()
         pygame.display.set_caption(settings.WINDOW_TITLE)
+
+        pygame.mixer.music.load("./assets/music/Below_the_Crushing_Weight.mp3")
 
         self.screen  = pygame.display.set_mode(
             (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT)
@@ -201,6 +204,7 @@ class Game:
     # ----------------------------------------------------------
 
     def run(self) -> None:
+        pygame.mixer.music.play(loops=-1)
         while self.running:
             if self.state == _HOME:
                 self._tick_home()
