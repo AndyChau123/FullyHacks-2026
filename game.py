@@ -15,6 +15,7 @@ from tile_types import TILE_ASSETS, TileType
 from ui_buttons import DirectionButtons, ACTION_LEFT, ACTION_FORWARD, ACTION_RIGHT
 from fish import FishManager
 from mine import MineManager
+from home_screen import HomeScreen
 
 # Direction delta used for harpoon ray-casting (defined here to avoid importing fish internals)
 _DIR_DELTA = {
@@ -25,11 +26,13 @@ _DIR_DELTA = {
 }
 
 # Game states
-_MENU    = "menu"
-_PLAYING = "playing"
-_DEAD    = "dead"
-_RESULTS = "results"
-_SHOP    = "shop"
+_HOME      = "home"
+_MENU      = "menu"
+_PLAYING   = "playing"
+_DEAD      = "dead"
+_RESULTS   = "results"
+_SHOP      = "shop"
+_GAME_OVER = "game_over"
 
 
 class Game:
@@ -50,13 +53,14 @@ class Game:
         )
         self.clock   = pygame.time.Clock()
         self.running = True
-        self.state   = _MENU
+        self.state   = _HOME
 
         self.hud_image = asset_loader.load_hud(
             size=(settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT)
         )
-        self.menu = Menu(self.screen, self.hud_image)
-        self.shop = Shop(self.screen, self.hud_image)
+        self.home_screen = HomeScreen(self.screen, self.hud_image)
+        self.menu        = Menu(self.screen, self.hud_image)
+        self.shop        = Shop(self.screen, self.hud_image)
 
         _sbx = (settings.SCREEN_WIDTH  - settings.SCAN_BTN_W) // 2
         _sby = settings.SCREEN_HEIGHT  - settings.SCAN_BTN_H  - settings.SCAN_BTN_BOTTOM_PAD
@@ -90,6 +94,9 @@ class Game:
         self._depth_bonus          = 0
         self._shuckle_bonus        = 0
         self._run_harpoon_kills    = 0
+        self._game_score_total     = 0   # cumulative score across all runs of the current game
+        self._final_game_score     = 0   # locked in when the game ends (shown on game-over screen)
+        self._final_game_shuckles  = 0
         self.inv_harpoons = 0
         self.inv_emp      = 0
         self.inv_battery  = 0
@@ -142,6 +149,7 @@ class Game:
             _sv["game_battery_bought"] = 0
             _sv["game_romo_bought"]    = 0
             _sv["romo_rescue"]         = 0
+            self._game_score_total     = 0
 
         self._current_run = _sv.get("game_runs_done", 0) + 1
 
@@ -187,7 +195,9 @@ class Game:
 
     def run(self) -> None:
         while self.running:
-            if self.state == _MENU:
+            if self.state == _HOME:
+                self._tick_home()
+            elif self.state == _MENU:
                 self._tick_menu()
             elif self.state == _PLAYING:
                 self._tick_game()
@@ -195,9 +205,32 @@ class Game:
                 self._tick_results()
             elif self.state == _SHOP:
                 self._tick_shop()
+            elif self.state == _GAME_OVER:
+                self._tick_game_over()
             else:
                 self._tick_dead()
         self._quit()
+
+    # ----------------------------------------------------------
+    #  Home screen tick
+    # ----------------------------------------------------------
+
+    def _tick_home(self) -> None:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+                return
+            result = self.home_screen.handle_event(event)
+            if result == "start":
+                self.state = _MENU
+                return
+            if result == "quit":
+                self.running = False
+                return
+
+        self.home_screen.draw()
+        pygame.display.flip()
+        self.clock.tick(settings.FPS)
 
     # ----------------------------------------------------------
     #  Menu tick
@@ -209,7 +242,7 @@ class Game:
                 self.running = False
                 return
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                self.running = False
+                self.state = _HOME
                 return
             result = self.menu.handle_event(event)
             if result == "play":
@@ -440,6 +473,12 @@ class Game:
 
         data["total_score"]    += self.score
         data["runs_completed"] += 1
+        self._game_score_total += self.score
+
+        if self._game_complete:
+            self._final_game_score    = self._game_score_total
+            self._final_game_shuckles = data["shuckles"]
+
         save_manager.save(data)
 
         print(f"[Game] EXTRACTED! Run {self._current_run}/{settings.RUNS_PER_GAME} | "
@@ -557,14 +596,12 @@ class Game:
         for tile, grid_pos, rect in self._get_slot_rects():
             if tile == TileType.TREASURE and rect.collidepoint(click_pos) and grid_pos:
                 self.grid.set(grid_pos[0], grid_pos[1], TileType.EMPTY)
-                self.score += 1
                 base   = random.randint(settings.TREASURE_MIN_VALUE,
                                         settings.TREASURE_MAX_VALUE)
                 earned = round(base * self.depth_multiplier)
                 self._treasure_log.append({"base": base, "earned": earned})
                 print(f"[Game] Treasure at {grid_pos}! "
-                      f"{base} × {self.depth_multiplier} = {earned} shuckles | "
-                      f"Score: {self.score}")
+                      f"{base} × {self.depth_multiplier} = {earned} shuckles")
                 return True
         return False
 
@@ -975,11 +1012,11 @@ class Game:
                 self.running = False
                 return
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                self.state = _MENU
+                self.state = _GAME_OVER if self._game_complete else _MENU
                 return
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if self._results_close.collidepoint(event.pos):
-                    self.state = _MENU
+                    self.state = _GAME_OVER if self._game_complete else _MENU
                     return
             if event.type == pygame.MOUSEWHEEL:
                 max_scroll = max(0, len(self._treasure_log) - 8)
@@ -1111,6 +1148,84 @@ class Game:
         self.screen.blit(total_txt, (p.left + 30, foot_y + len(lines) * 18 + 6))
 
     # ----------------------------------------------------------
+    #  Game-over screen  (shown after all 5 runs are complete)
+    # ----------------------------------------------------------
+
+    def _tick_game_over(self) -> None:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+                return
+            if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
+                self.menu.reload_save()
+                self.home_screen = HomeScreen(self.screen, self.hud_image)
+                self.state = _HOME
+                return
+
+        self.screen.fill(settings.DARK_BLUE)
+        self._draw_game_over_screen()
+        pygame.display.flip()
+        self.clock.tick(settings.FPS)
+
+    def _draw_game_over_screen(self) -> None:
+        overlay = pygame.Surface(
+            (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT), pygame.SRCALPHA
+        )
+        overlay.fill((0, 0, 10, 230))
+        self.screen.blit(overlay, (0, 0))
+
+        cx = settings.SCREEN_WIDTH  // 2
+        cy = settings.SCREEN_HEIGHT // 2
+
+        f_xl  = pygame.font.SysFont("monospace", 52, bold=True)
+        f_lg  = pygame.font.SysFont("monospace", 28, bold=True)
+        f_md  = pygame.font.SysFont("monospace", 18, bold=True)
+        f_sm  = pygame.font.SysFont("monospace", 14)
+
+        # Stars banner
+        stars = f_lg.render("★  ★  ★  ★  ★", True, (255, 215, 0))
+        self.screen.blit(stars, stars.get_rect(center=(cx, cy - 170)))
+
+        # Title
+        shadow = f_xl.render("GAME COMPLETE", True, (0, 0, 0))
+        title  = f_xl.render("GAME COMPLETE", True, settings.HUD_GREEN)
+        self.screen.blit(shadow, shadow.get_rect(center=(cx + 2, cy - 112)))
+        self.screen.blit(title,  title.get_rect(center=(cx, cy - 114)))
+
+        # Panel background
+        PW, PH = 560, 220
+        panel = pygame.Rect(cx - PW // 2, cy - 60, PW, PH)
+        pygame.draw.rect(self.screen, (4, 18, 36),       panel, border_radius=12)
+        pygame.draw.rect(self.screen, settings.HUD_GREEN, panel, width=2, border_radius=12)
+
+        # Stats
+        run_line = f_md.render(
+            f"Runs completed:    {settings.RUNS_PER_GAME} / {settings.RUNS_PER_GAME}",
+            True, (140, 210, 175),
+        )
+        shk_line = f_md.render(
+            f"Shuckles earned:   {self._final_game_shuckles}",
+            True, (140, 210, 175),
+        )
+        scr_line = f_lg.render(
+            f"FINAL SCORE:  {self._final_game_score}",
+            True, (255, 215, 0),
+        )
+
+        self.screen.blit(run_line, run_line.get_rect(center=(cx, panel.top + 48)))
+        self.screen.blit(shk_line, shk_line.get_rect(center=(cx, panel.top + 82)))
+
+        pygame.draw.line(self.screen, (0, 90, 55),
+                         (panel.left + 24, panel.top + 110),
+                         (panel.right - 24, panel.top + 110))
+
+        self.screen.blit(scr_line, scr_line.get_rect(center=(cx, panel.top + 148)))
+
+        # Prompt
+        hint = f_sm.render("Press any key or click to return to home", True, (80, 120, 100))
+        self.screen.blit(hint, hint.get_rect(center=(cx, panel.bottom + 30)))
+
+    # ----------------------------------------------------------
     #  Dead state
     # ----------------------------------------------------------
 
@@ -1144,7 +1259,7 @@ class Game:
 
         if self._death_reason == "fish":
             title_text = "CAUGHT BY A FISH"
-            sub_text   = "Devoured in the deep — run streak reset to 1."
+            sub_text   = "Devoured in the deep."
         elif self._death_reason == "mine":
             title_text = "MINE EXPLOSION"
             sub_text   = "The naval mine claimed another submarine."

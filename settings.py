@@ -123,7 +123,7 @@ SHOP_ITEMS = [
     {
         "id":             "harpoons",
         "name":           "Harpoon",
-        "price":          50,
+        "price":          100,
         "max_count":      3,
         "description":    "Strike your enemies from afar but beware you may miss",
         "asset":          "item_harpoon.png",
@@ -134,7 +134,7 @@ SHOP_ITEMS = [
     {
         "id":                 "emp_stun",
         "name":               "EMP Stun",
-        "price":              100,
+        "price":              500,
         "max_count":          1,
         "description":        "Stun enemies for 3 actions and extend nearby mine timers. Costs 20 energy. Auto-refills each run.",
         "asset":              "item_emp.png",
