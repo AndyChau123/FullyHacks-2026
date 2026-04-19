@@ -16,7 +16,7 @@ from ui_buttons import DirectionButtons, ACTION_LEFT, ACTION_FORWARD, ACTION_RIG
 from fish import FishManager
 from mine import MineManager
 from home_screen import HomeScreen
-from cutscene import Cutscene
+from cutscene import Cutscene, DEPTH_TIPS
 
 # Direction delta used for harpoon ray-casting (defined here to avoid importing fish internals)
 _DIR_DELTA = {
@@ -27,9 +27,10 @@ _DIR_DELTA = {
 }
 
 # Game states
-_HOME      = "home"
-_CUTSCENE  = "cutscene"
-_MENU      = "menu"
+_HOME       = "home"
+_CUTSCENE   = "cutscene"
+_DEPTH_TIP  = "depth_tip"
+_MENU       = "menu"
 _PLAYING   = "playing"
 _DEAD      = "dead"
 _RESULTS   = "results"
@@ -63,7 +64,8 @@ class Game:
         self.home_screen = HomeScreen(self.screen, self.hud_image)
         self.menu        = Menu(self.screen, self.hud_image)
         self.shop        = Shop(self.screen, self.hud_image)
-        self.cutscene    = None
+        self.cutscene      = None
+        self._depths_tipped: set[str] = set()
 
         _sbx = (settings.SCREEN_WIDTH  - settings.SCAN_BTN_W) // 2
         _sby = settings.SCREEN_HEIGHT  - settings.SCAN_BTN_H  - settings.SCAN_BTN_BOTTOM_PAD
@@ -204,6 +206,8 @@ class Game:
                 self._tick_home()
             elif self.state == _CUTSCENE:
                 self._tick_cutscene()
+            elif self.state == _DEPTH_TIP:
+                self._tick_depth_tip()
             elif self.state == _MENU:
                 self._tick_menu()
             elif self.state == _PLAYING:
@@ -259,6 +263,24 @@ class Game:
         self.clock.tick(settings.FPS)
 
     # ----------------------------------------------------------
+    #  Depth tip tick  (Romo's one-line tip before a new depth)
+    # ----------------------------------------------------------
+
+    def _tick_depth_tip(self) -> None:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+                return
+            if self.cutscene and self.cutscene.handle_event(event) == "done":
+                self._start_game(self.menu.grid_size)
+                return
+
+        if self.cutscene:
+            self.cutscene.draw()
+        pygame.display.flip()
+        self.clock.tick(settings.FPS)
+
+    # ----------------------------------------------------------
     #  Menu tick
     # ----------------------------------------------------------
 
@@ -272,7 +294,18 @@ class Game:
                 return
             result = self.menu.handle_event(event)
             if result == "play":
-                self._start_game(self.menu.grid_size)
+                depth = self.menu.depth_label
+                if depth not in self._depths_tipped and depth in DEPTH_TIPS:
+                    self._depths_tipped.add(depth)
+                    self.cutscene = Cutscene(
+                        self.screen, self.hud_image,
+                        dialog=DEPTH_TIPS[depth],
+                        depth_label=depth,
+                        show_cyndi=False,
+                    )
+                    self.state = _DEPTH_TIP
+                else:
+                    self._start_game(self.menu.grid_size)
                 return
             if result == "shop":
                 self.shop.reload_save()
@@ -1185,6 +1218,7 @@ class Game:
             if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
                 save_manager.reset()
                 self._game_score_total = 0
+                self._depths_tipped    = set()
                 self.menu.reload_save()
                 self.home_screen = HomeScreen(self.screen, self.hud_image)
                 self.state = _HOME
@@ -1265,6 +1299,7 @@ class Game:
             if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
                 save_manager.reset()
                 self._game_score_total = 0
+                self._depths_tipped    = set()
                 self.menu.reload_save()
                 self.home_screen = HomeScreen(self.screen, self.hud_image)
                 self.state = _HOME

@@ -33,6 +33,19 @@ _DIALOG = [
     ("Uncle Romo", "Before you go, let me give you some tips\u2026"),
 ]
 
+# ----- Depth tip dialogs (one line each, shown before run 1 of each depth) ---
+DEPTH_TIPS = {
+    "Depth 1": [("Uncle Romo", "Fish in this depth aren't aggressive and "
+                               "usually mind their own business.")],
+    "Depth 2": [("Uncle Romo", "Fish in this depth seem to be more interested "
+                               "in your submarine, be careful.")],
+    "Depth 3": [("Uncle Romo", "Watch out, this depth now introduces mines and "
+                               "the fish seem to be more aggressive towards you.")],
+    "Depth 4": [("Uncle Romo", "Be on the lookout Cyndi, even I\u2019ve never "
+                               "been to this depth, I can only imagine what "
+                               "goes on down there\u2026")],
+}
+
 # ----- Character asset filenames (assets/images/) -------------
 _ROMO_ASSET  = "romo.png"
 _CYNDI_ASSET = "cyndi.png"
@@ -83,9 +96,15 @@ class Cutscene:
       None    — still running
     """
 
-    def __init__(self, screen: pygame.Surface, hud_image: pygame.Surface):
-        self.screen    = screen
-        self.hud_image = hud_image
+    def __init__(self, screen: pygame.Surface, hud_image: pygame.Surface,
+                 dialog: list | None = None,
+                 depth_label: str | None = None,
+                 show_cyndi: bool = True):
+        self.screen       = screen
+        self.hud_image    = hud_image
+        self._dialog      = dialog if dialog is not None else _DIALOG
+        self._depth_label = depth_label
+        self._show_cyndi  = show_cyndi
 
         self._index = 0
         self._tick  = 0   # for blinking indicator
@@ -136,7 +155,7 @@ class Cutscene:
 
     def _advance(self):
         self._index += 1
-        if self._index >= len(_DIALOG):
+        if self._index >= len(self._dialog):
             return "done"
         return None
 
@@ -148,25 +167,56 @@ class Cutscene:
         self._ensure_fonts()
         self._tick += 1
         mouse  = pygame.mouse.get_pos()
-        speaker, _ = _DIALOG[self._index]
+        speaker, _ = self._dialog[self._index]
 
         # Background
-        self.screen.fill(settings.DARK_BLUE)
-        overlay = pygame.Surface(
-            (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT), pygame.SRCALPHA
-        )
-        overlay.fill((0, 0, 10, 210))
-        self.screen.blit(overlay, (0, 0))
+        if self._depth_label is not None:
+            # Depth tip: draw the actual ocean BG + HUD frame
+            bg_file = (settings.BG_SHALLOW
+                       if self._depth_label in ("Depth 1", "Depth 2")
+                       else settings.BG_DEEP)
+            if asset_loader.has_image(bg_file, settings.TILES_DIR):
+                bg = asset_loader.load_image_fit(
+                    bg_file,
+                    settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT,
+                    base_dir=settings.TILES_DIR,
+                )
+                self.screen.blit(bg, (0, 0))
+            else:
+                self.screen.fill(settings.OCEAN_BLUE)
+            if self.hud_image is not None:
+                self.screen.blit(self.hud_image, (0, 0))
+            # Semi-transparent dim for readability
+            overlay = pygame.Surface(
+                (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT), pygame.SRCALPHA
+            )
+            overlay.fill((0, 0, 10, 160))
+            self.screen.blit(overlay, (0, 0))
+        else:
+            self.screen.fill(settings.DARK_BLUE)
+            overlay = pygame.Surface(
+                (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT), pygame.SRCALPHA
+            )
+            overlay.fill((0, 0, 10, 210))
+            self.screen.blit(overlay, (0, 0))
 
         # Characters
+        if self._show_cyndi:
+            romo_rect = self._romo_rect
+        else:
+            # Centre Romo horizontally when Cyndi is hidden
+            romo_rect = self._romo_rect.copy()
+            romo_rect.centerx = settings.SCREEN_WIDTH // 2
+
         self._draw_character(
-            self._romo_rect,  "Uncle Romo", _ROMO_ASSET,
+            romo_rect, "Uncle Romo", _ROMO_ASSET,
             active=(speaker == "Uncle Romo"),
         )
-        self._draw_character(
-            self._cyndi_rect, "Cyndi",      _CYNDI_ASSET,
-            active=(speaker == "Cyndi"),
-        )
+        if self._show_cyndi:
+            self._draw_character(
+                self._cyndi_rect, "Cyndi", _CYNDI_ASSET,
+                active=(speaker == "Cyndi"),
+            )
 
         # Dialog panel
         self._draw_panel(speaker)
@@ -230,7 +280,7 @@ class Cutscene:
         self.screen.blit(name_surf, name_surf.get_rect(center=badge.center))
 
         # Word-wrapped dialog text
-        text   = _DIALOG[self._index][1]
+        text   = self._dialog[self._index][1]
         max_w  = p.width - _PANEL_PAD * 2
         lines  = _wrap(text, self._font_text, max_w)
         text_y = p.top + _PANEL_PAD + 6
@@ -248,7 +298,7 @@ class Cutscene:
 
         # Line counter
         prog = self._font_hint.render(
-            f"{self._index + 1} / {len(_DIALOG)}", True, (55, 85, 65)
+            f"{self._index + 1} / {len(self._dialog)}", True, (55, 85, 65)
         )
         self.screen.blit(prog, prog.get_rect(
             bottomleft=(p.left + _PANEL_PAD, p.bottom - 10)
