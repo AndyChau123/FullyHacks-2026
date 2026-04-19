@@ -27,15 +27,16 @@ _DIR_DELTA = {
 }
 
 # Game states
-_HOME       = "home"
-_CUTSCENE   = "cutscene"
-_DEPTH_TIP  = "depth_tip"
-_MENU       = "menu"
-_PLAYING   = "playing"
-_DEAD      = "dead"
-_RESULTS   = "results"
-_SHOP      = "shop"
-_GAME_OVER = "game_over"
+_HOME        = "home"
+_CUTSCENE    = "cutscene"
+_HOW_TO_PLAY = "how_to_play"
+_DEPTH_TIP   = "depth_tip"
+_MENU        = "menu"
+_PLAYING     = "playing"
+_DEAD        = "dead"
+_RESULTS     = "results"
+_SHOP        = "shop"
+_GAME_OVER   = "game_over"
 
 
 class Game:
@@ -164,7 +165,7 @@ class Game:
         _sv["battery_pack"] = 0
         save_manager.save(_sv)
 
-        self.inv_harpoons = _sv.get("harpoons",    0)
+        self.inv_harpoons = max(1, _sv.get("harpoons", 0))
         # EMP auto-refills each run if ever purchased
         self.inv_emp      = 1 if _sv.get("emp_ever_bought", 0) else 0
         self.inv_battery  = 0
@@ -210,6 +211,8 @@ class Game:
                 self._tick_home()
             elif self.state == _CUTSCENE:
                 self._tick_cutscene()
+            elif self.state == _HOW_TO_PLAY:
+                self._tick_how_to_play()
             elif self.state == _DEPTH_TIP:
                 self._tick_depth_tip()
             elif self.state == _MENU:
@@ -258,13 +261,42 @@ class Game:
                 self.running = False
                 return
             if self.cutscene and self.cutscene.handle_event(event) == "done":
-                self.state = _MENU
+                self.state = _HOW_TO_PLAY
                 return
 
         if self.cutscene:
             self.cutscene.draw()
         pygame.display.flip()
         self.clock.tick(settings.FPS)
+
+    # ----------------------------------------------------------
+    #  How-to-play infographic (shown once after intro cutscene)
+    # ----------------------------------------------------------
+
+    def _tick_how_to_play(self) -> None:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+                return
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.state = _MENU
+                return
+            if event.type == pygame.KEYDOWN and event.key in (
+                    pygame.K_SPACE, pygame.K_RETURN, pygame.K_ESCAPE):
+                self.state = _MENU
+                return
+
+        self._draw_how_to_play()
+        pygame.display.flip()
+        self.clock.tick(settings.FPS)
+
+    def _draw_how_to_play(self) -> None:
+        # Delegate to home_screen — it already has the exact panel drawing logic.
+        # Temporarily force the instructions overlay visible, draw, then restore.
+        self.home_screen._ensure_fonts()
+        self.home_screen._show_instructions = True
+        self.home_screen.draw()
+        self.home_screen._show_instructions = False
 
     # ----------------------------------------------------------
     #  Depth tip tick  (Romo's one-line tip before a new depth)
@@ -609,12 +641,19 @@ class Game:
     def _draw_tile_viewport(self) -> None:
         mouse_pos = pygame.mouse.get_pos()
         slots = self._get_slot_rects()
-        for i, (tile, _pos, rect) in enumerate(slots):
+        fish_map = {(f.x, f.y): f for f in self.fish_manager.fish}
+        mine_map = {(m.x, m.y): m for m in self.mine_manager.mines}
+        depth = self.menu.depth_label
+        for i, (tile, pos, rect) in enumerate(slots):
             scale = (settings.TILE_IMG_SCALE_CENTER if i == 1
                      else settings.TILE_IMG_SCALE_SIDE)
-            self._draw_tile(tile, rect, scale)
+            self._draw_tile(tile, rect, scale, pos)
             if tile == TileType.TREASURE and rect.collidepoint(mouse_pos):
                 self._draw_treasure_highlight(rect, scale)
+            if pos and pos in mine_map:
+                self._draw_entity_on_tile("landmine_tile.png", rect, scale)
+            if pos and pos in fish_map:
+                self._draw_fish_on_tile(fish_map[pos], i, rect, scale, depth)
 
     def _draw_treasure_highlight(self, rect: pygame.Rect, scale: float) -> None:
         filename = TILE_ASSETS.get(TileType.TREASURE)
@@ -632,11 +671,16 @@ class Game:
         if len(points) > 1:
             pygame.draw.lines(self.screen, settings.TREASURE_HIGHLIGHT, True, points, 2)
 
-    def _draw_tile(self, tile, rect: pygame.Rect, scale: float) -> None:
+    def _draw_tile(self, tile, rect: pygame.Rect, scale: float, pos=None) -> None:
         if tile is None:
             return
         if tile == TileType.ROCK:
-            filename = "rock_deep.png" if self.menu.depth_label in ("Depth 3", "Depth 4") else "rock.png"
+            depth = self.menu.depth_label
+            if depth in ("Depth 3", "Depth 4"):
+                variant = ((pos[0] + pos[1]) % 2) if pos else 0
+                filename = "rock2_depth3and4.png" if variant else "rock_depth3and4.png"
+            else:
+                filename = "rock2_depth1and2.png"
         else:
             filename = TILE_ASSETS.get(tile)
         if filename is None:
@@ -646,7 +690,71 @@ class Game:
         surf  = asset_loader.load_image_fit(filename, max_w, max_h,
                                             base_dir=settings.TILES_DIR)
         img_x = rect.x + (rect.w - surf.get_width()) // 2
-        # Vertical bias: push image toward the bottom of the slot
+        free_y = rect.h - surf.get_height()
+        img_y  = rect.y + int(free_y * settings.TILE_VERTICAL_BIAS)
+        self.screen.blit(surf, (img_x, img_y))
+
+    def _draw_entity_on_tile(self, filename: str, rect: pygame.Rect, scale: float) -> None:
+        """Draw a non-tile entity (mine, fish) on top of the slot at the same bias position."""
+        max_w = max(1, int(rect.w * scale))
+        max_h = max(1, int(rect.h * scale))
+        surf  = asset_loader.load_image_fit(filename, max_w, max_h,
+                                            base_dir=settings.TILES_DIR)
+        img_x = rect.x + (rect.w - surf.get_width()) // 2
+        free_y = rect.h - surf.get_height()
+        img_y  = rect.y + int(free_y * settings.TILE_VERTICAL_BIAS)
+        self.screen.blit(surf, (img_x, img_y))
+
+    # slot index: 0=left, 1=center, 2=right
+    _FISH_ASSETS = {
+        "depth1": {
+            "front": "depth1fish_front.png",
+            "side":  "depth1fish_facing_right.png",
+            "side_faces": "right",
+        },
+        "depth2and3": {
+            "front": "depth2and3fish_front.png",
+            "side":  "depth2and3fish_side_angle_facing_right.png",
+            "side_faces": "right",
+        },
+        "depth4": {
+            "front": "depth4_fish_facing_front.png",
+            "side":  "depth4_fish_facing_left.png",
+            "side_faces": "left",
+        },
+    }
+
+    def _draw_fish_on_tile(self, fish, slot_idx: int, rect: pygame.Rect,
+                           scale: float, depth: str) -> None:
+        if depth == "Depth 1":
+            tier = "depth1"
+        elif depth in ("Depth 2", "Depth 3"):
+            tier = "depth2and3"
+        else:
+            tier = "depth4"
+        assets = self._FISH_ASSETS[tier]
+
+        if slot_idx == 1:
+            # Center slot — fish coming straight at the player
+            filename = assets["front"]
+            flip_h   = False
+        else:
+            filename = assets["side"]
+            side_faces = assets["side_faces"]
+            if slot_idx == 0:
+                # LEFT slot — fish should face left on screen
+                flip_h = (side_faces == "right")
+            else:
+                # RIGHT slot — fish should face right on screen
+                flip_h = (side_faces == "left")
+
+        max_w = max(1, int(rect.w * scale))
+        max_h = max(1, int(rect.h * scale))
+        surf  = asset_loader.load_image_fit(filename, max_w, max_h,
+                                            base_dir=settings.TILES_DIR)
+        if flip_h:
+            surf = pygame.transform.flip(surf, True, False)
+        img_x  = rect.x + (rect.w - surf.get_width()) // 2
         free_y = rect.h - surf.get_height()
         img_y  = rect.y + int(free_y * settings.TILE_VERTICAL_BIAS)
         self.screen.blit(surf, (img_x, img_y))

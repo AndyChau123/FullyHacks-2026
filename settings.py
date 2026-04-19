@@ -269,10 +269,10 @@ FISH_SPAWN_EXCLUSION = 2
 
 # Fish count per depth
 FISH_COUNT = {
-    "Depth 1": 2,
-    "Depth 2": 2,
-    "Depth 3": 3,
-    "Depth 4": 3,
+    "Depth 1": 4,
+    "Depth 2": 4,
+    "Depth 3": 6,
+    "Depth 4": 6,
 }
 
 # Player actions between each fish act (lower = faster)
