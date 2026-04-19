@@ -13,6 +13,9 @@ SAVE_PATH = os.path.join(os.path.dirname(__file__), "save.json")
 _DEFAULTS: dict = {
     "total_score":    0,
     "runs_completed": 0,
+    "shuckles":       0,
+    "harpoons":       0,
+    "emp_stun":       0,
 }
 
 

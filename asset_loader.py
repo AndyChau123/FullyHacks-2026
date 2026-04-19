@@ -105,6 +105,13 @@ def load_ui(filename: str, size: tuple[int, int] | None = None) -> pygame.Surfac
     return load_image(filename, size=size, base_dir=settings.UI_DIR)
 
 
+def has_image(filename: str, base_dir: str | None = None) -> bool:
+    """Return True if the image file exists on disk (no loading)."""
+    if base_dir is None:
+        base_dir = settings.ASSETS_DIR
+    return os.path.exists(os.path.join(base_dir, filename))
+
+
 def clear_cache() -> None:
     """Free all cached surfaces from memory."""
     _cache.clear()

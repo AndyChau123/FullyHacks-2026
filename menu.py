@@ -121,7 +121,8 @@ class Menu:
         gx = cx - total_w // 2
         gy = cy - GBH // 2
 
-        self.grid_size = depths[0][1]
+        self.grid_size   = depths[0][1]
+        self.depth_label = depths[0][0]   # e.g. "Depth 1"
 
         self._grid_btns: list[_MenuButton] = [
             _MenuButton(
@@ -178,7 +179,8 @@ class Menu:
             for btn in self._grid_btns:
                 val = btn.handle_click(event.pos)
                 if val:
-                    self.grid_size = val
+                    self.grid_size   = val
+                    self.depth_label = btn.label
 
             # Action buttons
             if (val := self._play_btn.handle_click(event.pos)):

@@ -1,0 +1,104 @@
+================================================================
+  DEEP DIVE — Asset Reference
+  Drop any PNG into assets/ui/ to activate it.
+  Missing files fall back to programmatic drawing automatically.
+================================================================
+
+----------------------------------------------------------------
+  CONTROL BUTTONS  (ui_buttons.py)
+----------------------------------------------------------------
+  btn_left.png          Turn Left button
+  btn_forward.png       Move Forward button
+  btn_right.png         Turn Right button
+
+  Any size. Aspect ratio is preserved and image is centred
+  inside the button rect. Hover/press states apply a subtle
+  brightness tint over the image.
+
+----------------------------------------------------------------
+  MENU BUTTONS  (menu.py)
+----------------------------------------------------------------
+  btn_play.png          PLAY action button
+  btn_shop.png          SHOP action button
+  btn_depth_1.png       Depth 1 selector  (10x10)
+  btn_depth_2.png       Depth 2 selector  (15x15)
+  btn_depth_3.png       Depth 3 selector  (25x25)
+  btn_depth_4.png       Depth 4 selector  (40x40)
+
+  Selected depth buttons receive a green highlight border
+  regardless of whether an image or programmatic drawing is used.
+
+----------------------------------------------------------------
+  SHOP  (shop.py)
+----------------------------------------------------------------
+  shop_bg.png           Full-screen shop background.
+                        Replaces the dark overlay drawn over the
+                        HUD. Stretched to SCREEN_WIDTH x SCREEN_HEIGHT.
+
+  shop_card.png         Card frame, used for every item card.
+                        Stretched to 220x350 px per card.
+                        A semi-transparent white tint is applied
+                        on hover. Border is always drawn on top.
+
+  Item images are configured per-item in settings.SHOP_ITEMS
+  under the "asset" key. Place them in assets/ui/:
+    item_harpoon.png    Harpoon item card image
+    item_emp.png        EMP Stun item card image
+
+----------------------------------------------------------------
+  RADAR ICONS  (game.py — _draw_radar)
+----------------------------------------------------------------
+  Icons are scaled to fit inside one radar cell (approx 30x30 px).
+  If a file is missing the text label fallback is used instead.
+
+  Tile icons:
+    radar_rock.png          Rock tile   (fallback: "R")
+    radar_treasure.png      Treasure    (fallback: "T")
+    radar_empty.png         Empty tile  (fallback: "·")
+
+  Player icons (one per facing direction):
+    radar_player_n.png      Facing North  (fallback: "^")
+    radar_player_e.png      Facing East   (fallback: ">")
+    radar_player_s.png      Facing South  (fallback: "v")
+    radar_player_w.png      Facing West   (fallback: "<")
+
+  Fish icons:
+    radar_fish.png          Active fish   (fallback: red dot)
+    radar_fish_stun.png     Stunned fish  (fallback: same red dot,
+                                           grey arrow overlay)
+
+  Note: a small directional arrow is always drawn in the
+  top-left corner of a fish cell to indicate its next move,
+  regardless of whether radar_fish.png is present.
+
+----------------------------------------------------------------
+  OTHER IMAGE ASSETS
+----------------------------------------------------------------
+  assets/images/
+    hud.png               Main HUD overlay (full screen)
+
+  assets/tiles/
+    ocean.png             (or per-TileType filenames defined in
+                           tile_types.TILE_ASSETS)
+
+  assets/ui/
+    battery_high.png      Energy bar  >= 60%
+    battery_mid.png       Energy bar  >= 30%
+    battery_low.png       Energy bar  <  30%
+
+----------------------------------------------------------------
+  ADDING A NEW SHOP ITEM
+----------------------------------------------------------------
+  1. Add an entry to settings.SHOP_ITEMS:
+       {
+           "id":          "my_item",
+           "name":        "My Item",
+           "price":       75,
+           "max_count":   2,
+           "description": "What it does.",
+           "asset":       "item_my_item.png",
+       }
+  2. Add "my_item": 0 to save_manager._DEFAULTS.
+  3. Drop item_my_item.png into assets/ui/.
+
+================================================================

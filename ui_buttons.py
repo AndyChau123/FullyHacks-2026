@@ -11,6 +11,7 @@
 
 import pygame
 import settings
+import asset_loader
 
 
 # ------ Layout constants -------------------------------------
@@ -41,11 +42,12 @@ ACTION_RIGHT   = "rotate_right"
 
 class _Button:
     def __init__(self, x: int, y: int, w: int, h: int,
-                 label: str, action: str):
-        self.rect   = pygame.Rect(x, y, w, h)
-        self.label  = label
-        self.action = action
-        self._pressed = False
+                 label: str, action: str, asset_name: str | None = None):
+        self.rect       = pygame.Rect(x, y, w, h)
+        self.label      = label
+        self.action     = action
+        self.asset_name = asset_name
+        self._pressed   = False
 
     def draw(self, surface: pygame.Surface,
              font: pygame.font.Font,
@@ -54,6 +56,28 @@ class _Button:
 
         hovered = self.rect.collidepoint(mouse_pos) and not disabled
 
+        # --- Image path ---
+        if self.asset_name and asset_loader.has_image(self.asset_name, settings.UI_DIR):
+            img = asset_loader.load_image_fit(
+                self.asset_name, self.rect.w, self.rect.h,
+                base_dir=settings.UI_DIR,
+            )
+            # Centre image inside the button rect
+            img_rect = img.get_rect(center=self.rect.center)
+            surface.blit(img, img_rect.topleft)
+            # Subtle tint overlay for state feedback
+            if disabled or self._pressed or hovered:
+                tint = pygame.Surface(self.rect.size, pygame.SRCALPHA)
+                if disabled:
+                    tint.fill((0, 0, 0, 100))
+                elif self._pressed:
+                    tint.fill((0, 0, 0, 80))
+                else:
+                    tint.fill((255, 255, 255, 30))
+                surface.blit(tint, self.rect.topleft)
+            return
+
+        # --- Programmatic fallback ---
         if disabled:
             fill = COL_DISABLED
         elif self._pressed:
@@ -66,10 +90,9 @@ class _Button:
         pygame.draw.rect(surface, fill,        self.rect, border_radius=8)
         pygame.draw.rect(surface, COL_BORDER,  self.rect, width=1, border_radius=8)
 
-        col   = COL_DISABLED if disabled else COL_TEXT
-        text  = font.render(self.label, True, col)
-        trect = text.get_rect(center=self.rect.center)
-        surface.blit(text, trect)
+        col  = COL_DISABLED if disabled else COL_TEXT
+        text = font.render(self.label, True, col)
+        surface.blit(text, text.get_rect(center=self.rect.center))
 
     def contains(self, pos: tuple[int, int]) -> bool:
         return self.rect.collidepoint(pos)
@@ -103,11 +126,11 @@ class DirectionButtons:
         x = _START_X
         self._buttons = [
             _Button(x,                       BTN_Y, BTN_W, BTN_H,
-                    "< Turn Left",  ACTION_LEFT),
+                    "< Turn Left",  ACTION_LEFT,    settings.BTN_ASSET_LEFT),
             _Button(x + BTN_W + BTN_GAP,     BTN_Y, BTN_W, BTN_H,
-                    "^ Forward",    ACTION_FORWARD),
+                    "^ Forward",    ACTION_FORWARD, settings.BTN_ASSET_FORWARD),
             _Button(x + (BTN_W + BTN_GAP)*2, BTN_Y, BTN_W, BTN_H,
-                    "Turn Right >", ACTION_RIGHT),
+                    "Turn Right >", ACTION_RIGHT,   settings.BTN_ASSET_RIGHT),
         ]
 
     # ----------------------------------------------------------

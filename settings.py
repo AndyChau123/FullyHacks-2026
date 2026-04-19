@@ -21,6 +21,18 @@ DEPTHS = {
     "Depth 4": (40, 40),
 }
 
+# Shuckle multiplier per depth
+DEPTH_MULTIPLIERS = {
+    "Depth 1": 1.0,
+    "Depth 2": 1.25,
+    "Depth 3": 2.0,
+    "Depth 4": 2.5,
+}
+
+# Shuckle value range per treasure (before multiplier)
+TREASURE_MIN_VALUE = 10
+TREASURE_MAX_VALUE = 100
+
 # ----- Facing directions (used by Player and Grid) -----------
 NORTH = 0
 EAST  = 1
@@ -83,6 +95,26 @@ SCAN_BTN_W          = 220
 SCAN_BTN_H          = 40
 SCAN_BTN_BOTTOM_PAD = 20   # gap from screen bottom edge
 
+# ----- Shop items --------------------------------------------
+SHOP_ITEMS = [
+    {
+        "id":          "harpoons",
+        "name":        "Harpoon",
+        "price":       50,
+        "max_count":   3,
+        "description": "Strike your enemies from afar but beware you may miss",
+        "asset":       "item_harpoon.png",
+    },
+    {
+        "id":          "emp_stun",
+        "name":        "EMP Stun",
+        "price":       100,
+        "max_count":   1,
+        "description": "Take control of your surroundings by stunning in a 3x3 radius around the user.",
+        "asset":       "item_emp.png",
+    },
+]
+
 # ----- Extract button (appears at spawn tile) ----------------
 EXTRACT_BTN_W = 280
 EXTRACT_BTN_H = 50
@@ -90,3 +122,63 @@ EXTRACT_BTN_H = 50
 # ----- Movement ----------------------------------------------
 ACTION_ENERGY_COST = 1    # energy deducted per move or rotate
 MOVE_COOLDOWN_MS   = 200  # milliseconds between moves when key held
+
+# ----- Button asset names (place PNGs in assets/ui/) ---------
+# Control buttons (ui_buttons.py)
+BTN_ASSET_LEFT    = "btn_left.png"
+BTN_ASSET_FORWARD = "btn_forward.png"
+BTN_ASSET_RIGHT   = "btn_right.png"
+
+# Menu action buttons (menu.py)
+BTN_ASSET_PLAY    = "btn_play.png"
+BTN_ASSET_SHOP    = "btn_shop.png"
+
+# Menu depth-selector buttons — keyed by depth label
+BTN_ASSET_DEPTH = {
+    "Depth 1": "btn_depth_1.png",
+    "Depth 2": "btn_depth_2.png",
+    "Depth 3": "btn_depth_3.png",
+    "Depth 4": "btn_depth_4.png",
+}
+
+# ----- Shop asset names --------------------------------------
+SHOP_BG_ASSET   = "shop_bg.png"      # full-screen shop background
+SHOP_CARD_ASSET = "shop_card.png"    # card frame (220×350, tiled per card)
+
+# ----- Radar icon names (place PNGs in assets/ui/) -----------
+# One icon per cell type; if the file is missing the text label is used instead.
+RADAR_ICONS = {
+    "rock":       "radar_rock.png",
+    "treasure":   "radar_treasure.png",
+    "empty":      "radar_empty.png",
+    "player_n":   "radar_player_n.png",
+    "player_e":   "radar_player_e.png",
+    "player_s":   "radar_player_s.png",
+    "player_w":   "radar_player_w.png",
+    "fish":       "radar_fish.png",
+    "fish_stun":  "radar_fish_stun.png",
+}
+
+# ----- Enemy Fish --------------------------------------------
+# Exclusion zone: fish cannot spawn within this many tiles of the player spawn
+# (2 → a 5×5 square centered on spawn is off-limits)
+FISH_SPAWN_EXCLUSION = 2
+
+# Fish count per depth
+FISH_COUNT = {
+    "Depth 1": 2,
+    "Depth 2": 3,
+    "Depth 3": 5,
+    "Depth 4": 8,
+}
+
+# Player actions between each fish move (lower = faster)
+FISH_MOVE_INTERVAL = {
+    "Depth 1": 3,
+    "Depth 2": 3,
+    "Depth 3": 2,
+    "Depth 4": 2,
+}
+
+# EMP stun: how many player actions fish are frozen
+EMP_STUN_DURATION = 9
