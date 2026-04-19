@@ -46,9 +46,11 @@ DEPTH_TIPS = {
                                "goes on down there\u2026")],
 }
 
-# ----- Character asset filenames (assets/images/) -------------
-_ROMO_ASSET  = "romo.png"
-_CYNDI_ASSET = "cyndi.png"
+# ----- Character asset filenames (assets/ui/) -----------------
+_ROMO_IDLE   = "romo_idle.png"
+_ROMO_TALK   = "romo_talk.png"
+_CYNDI_IDLE  = "cindy_idle.png"
+_CYNDI_TALK  = "cindy_talk.png"
 
 # ----- Colour palette -----------------------------------------
 _ROMO_COL    = (100, 200, 255)
@@ -175,11 +177,11 @@ class Cutscene:
             bg_file = (settings.BG_SHALLOW
                        if self._depth_label in ("Depth 1", "Depth 2")
                        else settings.BG_DEEP)
-            if asset_loader.has_image(bg_file, settings.TILES_DIR):
+            if asset_loader.has_image(bg_file, settings.IMAGES_DIR):
                 bg = asset_loader.load_image_fit(
                     bg_file,
                     settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT,
-                    base_dir=settings.TILES_DIR,
+                    base_dir=settings.IMAGES_DIR,
                 )
                 self.screen.blit(bg, (0, 0))
             else:
@@ -193,11 +195,20 @@ class Cutscene:
             overlay.fill((0, 0, 10, 160))
             self.screen.blit(overlay, (0, 0))
         else:
-            self.screen.fill(settings.DARK_BLUE)
+            # Intro cutscene: use the depth-select menu art as background
+            if asset_loader.has_image(settings.DEPTH_SELECT_BG, settings.IMAGES_DIR):
+                bg = asset_loader.load_image(
+                    settings.DEPTH_SELECT_BG,
+                    size=(settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT),
+                    base_dir=settings.IMAGES_DIR,
+                )
+                self.screen.blit(bg, (0, 0))
+            else:
+                self.screen.fill(settings.DARK_BLUE)
             overlay = pygame.Surface(
                 (settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT), pygame.SRCALPHA
             )
-            overlay.fill((0, 0, 10, 210))
+            overlay.fill((0, 0, 10, 160))
             self.screen.blit(overlay, (0, 0))
 
         # Characters
@@ -208,14 +219,18 @@ class Cutscene:
             romo_rect = self._romo_rect.copy()
             romo_rect.centerx = settings.SCREEN_WIDTH // 2
 
+        romo_active = (speaker == "Uncle Romo")
         self._draw_character(
-            romo_rect, "Uncle Romo", _ROMO_ASSET,
-            active=(speaker == "Uncle Romo"),
+            romo_rect, "Uncle Romo",
+            _ROMO_TALK if romo_active else _ROMO_IDLE,
+            active=romo_active,
         )
         if self._show_cyndi:
+            cyndi_active = (speaker == "Cyndi")
             self._draw_character(
-                self._cyndi_rect, "Cyndi", _CYNDI_ASSET,
-                active=(speaker == "Cyndi"),
+                self._cyndi_rect, "Cyndi",
+                _CYNDI_TALK if cyndi_active else _CYNDI_IDLE,
+                active=cyndi_active,
             )
 
         # Dialog panel
@@ -232,10 +247,10 @@ class Cutscene:
                         asset: str, active: bool) -> None:
         col = _NAME_COLS[name]
 
-        if asset_loader.has_image(asset, settings.IMAGES_DIR):
+        if asset_loader.has_image(asset, settings.UI_DIR):
             surf = asset_loader.load_image_fit(
                 asset, rect.width, rect.height,
-                base_dir=settings.IMAGES_DIR,
+                base_dir=settings.UI_DIR,
             )
             self.screen.blit(surf, surf.get_rect(midbottom=rect.midbottom))
         else:
@@ -252,11 +267,6 @@ class Cutscene:
             lbl = self._font_char.render(name, True, col)
             self.screen.blit(lbl, lbl.get_rect(center=(rect.centerx, rect.top + 30)))
 
-        # Dim inactive speaker
-        if not active:
-            dim = pygame.Surface(rect.size, pygame.SRCALPHA)
-            dim.fill((0, 0, 0, 165))
-            self.screen.blit(dim, rect.topleft)
 
     # ----------------------------------------------------------
     #  Dialog panel

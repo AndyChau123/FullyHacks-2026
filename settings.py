@@ -250,16 +250,16 @@ SHOP_CARD_ASSET = "shop_card.png"    # card frame (220×350, tiled per card)
 # One icon per cell type; if the file is missing the text label is used instead.
 RADAR_ICONS = {
     "rock":        "radar_rock.png",
-    "treasure":    "radar_treasure.png",
+    "treasure":    "radar_treasure_icon.png",
     "empty":       "radar_empty.png",
     "player_n":    "radar_player_n.png",
     "player_e":    "radar_player_e.png",
     "player_s":    "radar_player_s.png",
     "player_w":    "radar_player_w.png",
     "fish":        "radar_fish.png",
-    "fish_stun":   "radar_fish_stun.png",
-    "mine":        "radar_mine.png",        # dormant mine
-    "mine_trig":   "radar_mine_trig.png",   # triggered (counting down)
+    "fish_stun":   "radar_fish_stunned.png",
+    "mine":        "landmine.png",          # dormant mine
+    "mine_trig":   "landmine.png",          # triggered (counting down; countdown drawn on top)
 }
 
 # ----- Enemy Fish --------------------------------------------
