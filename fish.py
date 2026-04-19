@@ -212,6 +212,25 @@ class FishManager:
             if abs(f.x - cx) <= radius and abs(f.y - cy) <= radius:
                 f.stun(duration)
 
+    def fire_harpoon(self, px: int, py: int, direction: int, grid) -> bool:
+        """
+        Trace a ray from (px, py) in direction; remove the first fish hit.
+        Stops at rocks or grid edges. Returns True if a fish was killed.
+        """
+        dx, dy = _DELTA[direction]
+        x, y   = px + dx, py + dy
+        while True:
+            tile = grid.get(x, y)
+            if tile is None or tile == TileType.ROCK:
+                break
+            for i, f in enumerate(self.fish):
+                if f.x == x and f.y == y:
+                    self.fish.pop(i)
+                    return True
+            x += dx
+            y += dy
+        return False
+
     # ----------------------------------------------------------
     #  Convenience
     # ----------------------------------------------------------
